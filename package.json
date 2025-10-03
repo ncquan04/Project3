@@ -9,6 +9,14 @@
     "start": "react-native start",
     "test": "jest"
   },
+  "codegenConfig": {
+    "name": "NativeRTNAttendanceSpec",
+    "type": "modules",
+    "jsSrcsDir": "specs",
+    "android": {
+      "javaPackageName": "com.native_rtn_attendance"
+    }
+  },
   "dependencies": {
     "react": "19.1.0",
     "react-native": "0.81.4",
