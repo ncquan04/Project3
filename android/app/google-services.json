@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1030795650725",
+    "project_id": "native-rtn-attendance-54805",
+    "storage_bucket": "native-rtn-attendance-54805.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1030795650725:android:69e23fb4637de88286cf4c",
+        "android_client_info": {
+          "package_name": "com.projectiii"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1030795650725-55tj05cdisb1qgt419feabg9n9vn1hpt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.projectiii",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "1030795650725-jfrj7m24a3nf83t1bdci2hqrnuof98e8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIuY18k6uicPzu1WI58Dmy_mDHM8ygpfE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1030795650725-jfrj7m24a3nf83t1bdci2hqrnuof98e8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
