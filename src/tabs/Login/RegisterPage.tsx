@@ -2,17 +2,27 @@ import { View, Text, StatusBar, Image } from 'react-native';
 import React, { useState } from 'react';
 import LinearGradient from 'react-native-linear-gradient';
 import { THEME_COLOR } from '../../constants';
-import LoginHeader from './components/LoginHeader';
-import LoginArea from './components/LoginArea';
 import CommonButton from '../../components/common/CommonButton';
 import { useAuth } from '../../contexts/AuthContext';
+import LoginArea from './components/LoginArea';
+import SignupHeader from './components/SignupHeader';
 
-const LoginPage = () => {
+const RegisterPage = () => {
+  const { register } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
 
-  const { login } = useAuth();
+  const handleRegister = async () => {
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    await register(username, password).catch(err => {
+      setError(err.message);
+    });
+  };
 
   return (
     <LinearGradient
@@ -55,22 +65,24 @@ const LoginPage = () => {
           gap: 24,
         }}
       >
-        <LoginHeader />
+        <SignupHeader />
         <LoginArea
           username={username}
           password={password}
           setUsername={setUsername}
           setPassword={setPassword}
+          confirmPassword={confirmPassword}
+          setConfirmPassword={setConfirmPassword}
           error={error}
           setError={setError}
         />
         <CommonButton
-          onPress={() => login(username, password, setError)}
-          buttonText="Login"
+          onPress={async () => await handleRegister()}
+          buttonText="Register"
         />
       </View>
     </LinearGradient>
   );
 };
 
-export default LoginPage;
+export default RegisterPage;

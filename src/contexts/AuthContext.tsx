@@ -18,14 +18,22 @@ import { navigationRef } from '../navigation';
 const AuthContext = createContext<{
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (
+    username: string,
+    password: string,
+    setError: React.Dispatch<React.SetStateAction<string>>,
+  ) => Promise<void>;
   logout: () => void;
   register: (username: string, password: string) => Promise<void>;
   user: FirebaseAuthTypes.User | null;
 }>({
   isAuthenticated: false,
   isLoading: true,
-  login: (username: string, password: string) => Promise.resolve(),
+  login: (
+    username: string,
+    password: string,
+    setError: React.Dispatch<React.SetStateAction<string>>,
+  ) => Promise.resolve(),
   logout: () => {},
   register: (username: string, password: string) => Promise.resolve(),
   user: null,
@@ -45,7 +53,11 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
     return subsciber;
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = async (
+    username: string,
+    password: string,
+    setError: React.Dispatch<React.SetStateAction<string>>,
+  ) => {
     await signInWithEmailAndPassword(getAuth(), username, password)
       .then(userCredential => {
         setUser(userCredential.user);
@@ -58,6 +70,7 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       })
       .catch(error => {
         console.error('Login error: ', error);
+        setError('Invalid username or password');
       });
   };
 

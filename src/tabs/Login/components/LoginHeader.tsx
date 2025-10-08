@@ -1,7 +1,12 @@
 import { Text, View } from 'react-native';
 import { THEME_COLOR } from '../../../constants';
+import { navigationRef } from '../../../navigation';
 
 const LoginHeader = () => {
+  const onPressSignUp = () => {
+    navigationRef.navigate('Register');
+  };
+
   return (
     <View style={{ gap: 8, alignItems: 'center' }}>
       <Text
@@ -26,6 +31,7 @@ const LoginHeader = () => {
             textDecorationLine: 'underline',
             color: THEME_COLOR.primaryBlue,
           }}
+          onPress={onPressSignUp}
         >
           Sign up
         </Text>
