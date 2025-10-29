@@ -14,15 +14,7 @@ export type AppStackParamList = {
 const MainStack = createNativeStackNavigator<AppStackParamList>();
 
 export const MainStackNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  const { isAuthenticated } = useAuth();
 
   return (
     <MainStack.Navigator

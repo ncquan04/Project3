@@ -6,6 +6,7 @@ import CommonButton from '../../components/common/CommonButton';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginArea from './components/LoginArea';
 import SignupHeader from './components/SignupHeader';
+import { UserRole } from '../../types';
 
 const RegisterPage = () => {
   const { register } = useAuth();
@@ -13,13 +14,14 @@ const RegisterPage = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [role, setRole] = useState<UserRole>(UserRole.Student);
 
   const handleRegister = async () => {
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    await register(username, password).catch(err => {
+    await register(username, password, role).catch(err => {
       setError(err.message);
     });
   };
@@ -75,6 +77,9 @@ const RegisterPage = () => {
           setConfirmPassword={setConfirmPassword}
           error={error}
           setError={setError}
+          chooseRole={true}
+          role={role}
+          setRole={setRole}
         />
         <CommonButton
           onPress={async () => await handleRegister()}

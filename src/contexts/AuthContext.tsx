@@ -14,6 +14,9 @@ import {
   useState,
 } from 'react';
 import { navigationRef } from '../navigation';
+import { getFirestore } from '@react-native-firebase/firestore';
+import { UserRole } from '../types';
+import LoadingModal from '../components/loading/LoadingModal';
 
 const AuthContext = createContext<{
   isAuthenticated: boolean;
@@ -24,8 +27,13 @@ const AuthContext = createContext<{
     setError: React.Dispatch<React.SetStateAction<string>>,
   ) => Promise<void>;
   logout: () => void;
-  register: (username: string, password: string) => Promise<void>;
+  register: (
+    username: string,
+    password: string,
+    role: UserRole,
+  ) => Promise<void>;
   user: FirebaseAuthTypes.User | null;
+  role: UserRole | null;
 }>({
   isAuthenticated: false,
   isLoading: true,
@@ -37,15 +45,21 @@ const AuthContext = createContext<{
   logout: () => {},
   register: (username: string, password: string) => Promise.resolve(),
   user: null,
+  role: null,
 });
 
 const AuthContextProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
+
+  console.log('AAAAAAAAAAAAAAAAAAAAAAAA', user, role);
 
   const handleAuthStateChanged = (user: FirebaseAuthTypes.User | null) => {
     setUser(user);
-    setIsLoading(false);
+    if (isLoading) {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -58,11 +72,24 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
     password: string,
     setError: React.Dispatch<React.SetStateAction<string>>,
   ) => {
+    setIsLoading(true);
     await signInWithEmailAndPassword(getAuth(), username, password)
       .then(userCredential => {
         setUser(userCredential.user);
+        return userCredential;
+      })
+      .then(async userCredential => {
+        const res = await getFirestore()
+          .collection('users')
+          .doc(userCredential.user.uid)
+          .get();
+        return res.data();
+      })
+      .then(userData => {
+        setRole(userData?.role as UserRole);
       })
       .then(() => {
+        setIsLoading(false);
         navigationRef.reset({
           index: 0,
           routes: [{ name: 'Home' }],
@@ -71,6 +98,7 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       .catch(error => {
         console.error('Login error: ', error);
         setError('Invalid username or password');
+        setIsLoading(false);
       });
   };
 
@@ -88,13 +116,46 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       });
   };
 
-  const register = async (username: string, password: string) => {
+  const register = async (
+    username: string,
+    password: string,
+    role: UserRole,
+  ) => {
+    setIsLoading(true);
     await createUserWithEmailAndPassword(getAuth(), username, password)
-      .then(userCredential => {
+      .then(async userCredential => {
         setUser(userCredential.user);
+        return userCredential;
+      })
+      .then(async userCredential => {
+        await getFirestore()
+          .collection('users')
+          .doc(userCredential.user.uid)
+          .set({
+            role: role,
+          });
+        return userCredential;
+      })
+      .then(async userCredential => {
+        const res = await getFirestore()
+          .collection('users')
+          .doc(userCredential.user.uid)
+          .get();
+        return res.data();
+      })
+      .then(userData => {
+        setRole(userData?.role as UserRole);
+      })
+      .then(() => {
+        setIsLoading(false);
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
       })
       .catch(error => {
         console.error('Register error: ', error);
+        setIsLoading(false);
       });
   };
   return (
@@ -106,8 +167,10 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
         logout,
         register,
         user,
+        role,
       }}
     >
+      <LoadingModal visible={isLoading} />
       {children}
     </AuthContext.Provider>
   );

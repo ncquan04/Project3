@@ -17,12 +17,16 @@ import java.net.Socket
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class NativeRTNAttendanceModule(
     reactContext: ReactApplicationContext
 ) : NativeRTNAttendanceSpec(reactContext) {
     companion object {
         const val NAME = "NativeRTNAttendance"
+        private const val TAG = "NativeRTNAttendance"
+        private const val SHUTDOWN_TIMEOUT_SECONDS = 5L
+        const val SERVICE_TYPE = "_rtnattendance._tcp."
     }
 
     override fun getName() = NAME
@@ -30,156 +34,343 @@ class NativeRTNAttendanceModule(
     private val nsd = NSDHelper(reactContext)
     private var serverSocket: ServerSocket? = null
     private val serverPool = Executors.newCachedThreadPool()
-
-    @Volatile private var clientSocket: Socket? = null
-    @Volatile private var clientReader: BufferedReader? = null
-    @Volatile private var clientWriter: PrintWriter?= null
-
+    
+    // Multi-client support
+    private data class ClientConnection(
+        val socket: Socket,
+        val writer: PrintWriter,
+        val reader: BufferedReader,
+        val connectedAt: Long = System.currentTimeMillis()
+    )
+    
+    private val connectedClients = ConcurrentHashMap<String, ClientConnection>()
+    private val clientsLock = Any()
+    
+    // Single client for outgoing connections (when acting as client)
+    private val clientLock = Any()
+    private var clientSocket: Socket? = null
+    private var clientReader: BufferedReader? = null
+    private var clientWriter: PrintWriter? = null
+    
     private var sessionSecret: String? = null
     private var registeredServiceName: String? = null
-
-    private val found = ConcurrentHashMap<String, NsdServiceInfo>()
+    private val foundServices = ConcurrentHashMap<String, NsdServiceInfo>()
+    
+    private var discoveryTimeoutRunnable: Runnable? = null
+    private val discoveryHandler = Handler(Looper.getMainLooper())
 
     private fun svcKey(name: String, type: String) = "${name}|${nsd.normalizeType(type)}"
     private fun svcKey(info: NsdServiceInfo) = svcKey(info.serviceName, info.serviceType)
 
-    private fun getLocalIPV4(): String {
-        val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
-        for (iface in interfaces) {
-            if (!iface.isUp || iface.isLoopback) continue
-            val address = Collections.list(iface.inetAddresses)
-            for (addr in address) {
-                val host = addr.hostAddress ?: continue
-                if (!host.contains(":") && addr.isSiteLocalAddress) return host
+    private fun getLocalIPv4(): String {
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (iface in interfaces) {
+                if (!iface.isUp || iface.isLoopback) continue
+                val addresses = Collections.list(iface.inetAddresses)
+                for (addr in addresses) {
+                    val host = addr.hostAddress ?: continue
+                    if (!host.contains(":") && addr.isSiteLocalAddress) return host
+                }
             }
+            Log.w(TAG, "No site-local IPv4 address found, falling back to localhost")
+            return "127.0.0.1"
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get local IPv4 address", e)
+            return "127.0.0.1"
         }
+    }
 
-        return "127.0.0.1"
+    private fun closeClientConnection() {
+        synchronized(clientLock) {
+            runCatching { clientWriter?.close() }
+            runCatching { clientReader?.close() }
+            runCatching { clientSocket?.close() }
+            clientWriter = null
+            clientReader = null
+            clientSocket = null
+        }
+    }
+    
+    private fun closeServerClientConnection(clientId: String) {
+        val conn = synchronized(clientsLock) {
+            connectedClients.remove(clientId)
+        }
+        
+        conn?.let {
+            runCatching { it.writer.close() }
+            runCatching { it.reader.close() }
+            runCatching { it.socket.close() }
+            Log.d(TAG, "Closed connection for client: $clientId (Total clients: ${connectedClients.size})")
+        }
+    }
+    
+    private fun closeAllServerConnections() {
+        val clientsToClose = synchronized(clientsLock) {
+            val clients = connectedClients.toMap()
+            connectedClients.clear()
+            clients
+        }
+        
+        clientsToClose.forEach { (clientId, conn) ->
+            runCatching { conn.writer.close() }
+            runCatching { conn.reader.close() }
+            runCatching { conn.socket.close() }
+            Log.d(TAG, "Closed connection for client: $clientId")
+        }
+        
+        Log.d(TAG, "Closed all client connections (${clientsToClose.size} total)")
     }
 
     override fun setSessionSecret(sessionSecret: String?) {
         this.sessionSecret = sessionSecret
-        val m = Arguments.createMap().apply {
+        val map = Arguments.createMap().apply {
             putString("key", "sessionSecret")
-            putString("value", "set")
+            putString("value", sessionSecret ?: "unset")
         }
-        emitOnKeyAdded(m)
+        emitOnKeyAdded(map)
     }
 
     override fun startServer(promise: Promise) {
         try {
-            if (serverSocket == null || serverSocket?.isClosed == true) {
-                val ss = ServerSocket(0)
-                serverSocket = ss
-                serverPool.execute {
+            if (serverSocket?.isClosed == false) {
+                promise.resolve(Arguments.createMap().apply {
+                    putString("ip", getLocalIPv4())
+                    putInt("port", serverSocket!!.localPort)
+                    putString("status", "already_running")
+                })
+                return
+            }
+
+            val ss = ServerSocket(0).apply { reuseAddress = true }
+            serverSocket = ss
+            serverPool.execute {
+                try {
                     while (!ss.isClosed) {
+                        val sock = ss.accept()
+                        val clientId = "${sock.inetAddress.hostAddress}:${sock.port}"
+                        
                         try {
-                            val sock = ss.accept()
-                            synchronized(this) {
-                                clientSocket?.runCatching { close() }
-                                clientSocket = sock
-                                clientWriter = PrintWriter(sock.getOutputStream(), true)
-                                clientReader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                            val writer = PrintWriter(sock.getOutputStream(), true)
+                            val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                            val connection = ClientConnection(sock, writer, reader)
+                            
+                            val totalClients = synchronized(clientsLock) {
+                                connectedClients[clientId] = connection
+                                connectedClients.size
                             }
-
-                            serverPool.execute {
-                                try {
-                                    var line: String?
-                                    while (sock.isConnected && clientReader?.readLine().also { line = it } != null) {
-
-                                    }
-                                } catch (ignore: Exception) {}
+                            
+                            Log.d(TAG, "New client connected: $clientId (Total: $totalClients)")
+                            
+                            val map = Arguments.createMap().apply {
+                                putString("key", "clientConnected")
+                                putString("value", clientId)
+                                putInt("totalClients", totalClients)
                             }
+                            emitOnKeyAdded(map)
+                            
+                            serverPool.execute { handleClient(clientId, connection) }
                         } catch (e: Exception) {
-                            break
+                            Log.e(TAG, "Failed to setup client connection: $clientId", e)
+                            runCatching { sock.close() }
                         }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Server loop terminated", e)
+                    closeAllServerConnections()
+                } finally {
+                    // Ensure serverSocket reference is cleared if loop exits
+                    if (serverSocket == ss) {
+                        serverSocket = null
                     }
                 }
             }
-            val map = Arguments.createMap().apply {
-                putString("ip", getLocalIPV4())
-                putInt("port", serverSocket!!.localPort)
-            }
-            promise.resolve(map)
+            promise.resolve(Arguments.createMap().apply {
+                putString("ip", getLocalIPv4())
+                putInt("port", ss.localPort)
+                putString("status", "started")
+            })
         } catch (e: Exception) {
-            promise.reject("START_SERVER_FAILED", e)
+            Log.e(TAG, "Failed to start server", e)
+            promise.reject("START_SERVER_FAILED", "Failed to start server: ${e.message}", e)
+        }
+    }
+
+    private fun handleClient(clientId: String, connection: ClientConnection) {
+        try {
+            while (connection.socket.isConnected && !connection.socket.isClosed) {
+                val line = connection.reader.readLine() ?: break
+                
+                // Validate session secret if set
+                val secret = sessionSecret
+                if (secret != null) {
+                    if (!line.startsWith("AUTH:$secret:")) {
+                        Log.w(TAG, "Invalid session secret from $clientId: ${line.take(20)}...")
+                        continue
+                    }
+                }
+                
+                Log.d(TAG, "Message from $clientId: $line")
+                
+                val totalClients = connectedClients.size
+                val map = Arguments.createMap().apply {
+                    putString("key", "messageReceived")
+                    putString("value", line)
+                    putString("clientId", clientId)
+                    putInt("totalClients", totalClients)
+                }
+                emitOnKeyAdded(map)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Client $clientId disconnected or error occurred", e)
+        } finally {
+            closeServerClientConnection(clientId)
+            
+            val totalClients = connectedClients.size
+            val map = Arguments.createMap().apply {
+                putString("key", "clientDisconnected")
+                putString("value", clientId)
+                putInt("totalClients", totalClients)
+            }
+            emitOnKeyAdded(map)
         }
     }
 
     override fun stopServer(promise: Promise) {
         try {
+            val clientCount = connectedClients.size
+            closeAllServerConnections()
             serverSocket?.close()
             serverSocket = null
-            promise.resolve(null)
+            promise.resolve(Arguments.createMap().apply {
+                putString("status", "stopped")
+                putInt("disconnectedClients", clientCount)
+            })
         } catch (e: Exception) {
-            promise.reject("STOP_SERVER_FAILED", e)
+            Log.e(TAG, "Failed to stop server", e)
+            promise.reject("STOP_SERVER_FAILED", "Failed to stop server: ${e.message}", e)
         }
     }
 
-    override fun registerService(serviceType: String, promise: Promise) {
+    override fun registerService(promise: Promise) {
         val ss = serverSocket
         if (ss == null || ss.isClosed) {
             promise.reject("NO_SERVER", "Server not started")
             return
         }
-        nsd.register(
-            serviceName = "RTNAttendance",
-            serviceType = nsd.normalizeType(serviceType),
-            port = ss.localPort,
-            onRegistered = { actual ->
-                registeredServiceName = actual
-                val m = Arguments.createMap().apply { putString("serviceName", actual) }
-                promise.resolve(m)
-            },
-            onError = { err -> promise.reject("REGISTER_FAILED", err) }
-        )
+        try {
+            nsd.register(
+                serviceName = "RTNAttendance",
+                serviceType = SERVICE_TYPE,
+                port = ss.localPort,
+                onRegistered = { actual ->
+                    registeredServiceName = actual
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("serviceName", actual)
+                        putString("status", "registered")
+                    })
+                },
+                onError = { err ->
+                    Log.e(TAG, "Failed to register service: $err")
+                    promise.reject("REGISTER_FAILED", err)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register service", e)
+            promise.reject("REGISTER_FAILED", "Failed to register service: ${e.message}", e)
+        }
     }
 
     override fun unregisterService(promise: Promise) {
         try {
             nsd.unregister()
             registeredServiceName = null
-            promise.resolve(null)
+            promise.resolve(Arguments.createMap().apply {
+                putString("status", "unregistered")
+            })
         } catch (e: Exception) {
-            promise.reject("UNREGISTER_FAILED", e)
+            Log.e(TAG, "Failed to unregister service", e)
+            promise.reject("UNREGISTER_FAILED", "Failed to unregister service: ${e.message}", e)
         }
     }
 
-    override fun startDiscovery(serviceType: String, timeoutMs: Double, promise: Promise) {
-        val type = nsd.normalizeType(serviceType)
-        nsd.discover(
-            serviceType = type,
-            onFound = { serviceInfo -> found[svcKey(serviceInfo)] = serviceInfo },
-            onLost = { serviceInfo -> found.remove(svcKey(serviceInfo)) },
-            onError = { err ->
-                val m = Arguments.createMap().apply {
-                    putString("key", "discoveryError")
-                    putString("value", err)
+    override fun startDiscovery(timeoutMs: Double, promise: Promise) {
+        try {
+            // Cancel any pending timeout
+            discoveryTimeoutRunnable?.let { discoveryHandler.removeCallbacks(it) }
+            
+            val type = SERVICE_TYPE
+            nsd.discover(
+                serviceType = type,
+                onFound = { serviceInfo ->
+                    foundServices[svcKey(serviceInfo)] = serviceInfo
+                    val map = Arguments.createMap().apply {
+                        putString("key", "serviceFound")
+                        putString("serviceName", serviceInfo.serviceName)
+                    }
+                    emitOnKeyAdded(map)
+                },
+                onLost = { serviceInfo ->
+                    foundServices.remove(svcKey(serviceInfo))
+                    val map = Arguments.createMap().apply {
+                        putString("key", "serviceLost")
+                        putString("serviceName", serviceInfo.serviceName)
+                    }
+                    emitOnKeyAdded(map)
+                },
+                onError = { err ->
+                    Log.e(TAG, "Discovery error: $err")
+                    val map = Arguments.createMap().apply {
+                        putString("key", "discoveryError")
+                        putString("value", err)
+                    }
+                    emitOnKeyAdded(map)
                 }
-                emitOnKeyAdded(m)
+            )
+            
+            // Schedule timeout
+            discoveryTimeoutRunnable = Runnable {
+                runCatching {
+                    nsd.stopDiscovery()
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("status", "discovery_stopped")
+                    })
+                }.onFailure { e ->
+                    Log.e(TAG, "Failed to stop discovery", e)
+                    promise.reject("STOP_DISCOVERY_FAILED", "Failed to stop discovery: ${e.message}", e)
+                }
+                discoveryTimeoutRunnable = null
             }
-        )
-        Handler(Looper.getMainLooper()).postDelayed(
-            { runCatching { nsd.stopDiscovery() } },
-            timeoutMs.toLong()
-        )
-        promise.resolve(null)
+            discoveryHandler.postDelayed(discoveryTimeoutRunnable!!, timeoutMs.toLong())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start discovery", e)
+            promise.reject("START_DISCOVERY_FAILED", "Failed to start discovery: ${e.message}", e)
+        }
     }
 
     override fun stopDiscovery(promise: Promise) {
         try {
+            // Cancel timeout if exists
+            discoveryTimeoutRunnable?.let { 
+                discoveryHandler.removeCallbacks(it)
+                discoveryTimeoutRunnable = null
+            }
+            
             nsd.stopDiscovery()
-            promise.resolve(null)
+            promise.resolve(Arguments.createMap().apply {
+                putString("status", "stopped")
+            })
         } catch (e: Exception) {
-            promise.reject("STOP_DISCOVERY_FAILED", e)
+            Log.e(TAG, "Failed to stop discovery", e)
+            promise.reject("STOP_DISCOVERY_FAILED", "Failed to stop discovery: ${e.message}", e)
         }
     }
 
     override fun resolveAndConnect(serviceName: String, promise: Promise) {
-        val entry = found.entries.firstOrNull{ it.key.startsWith("$serviceName|") }
+        val entry = foundServices.entries.firstOrNull { it.key.startsWith("$serviceName|") }
         val serviceInfo = entry?.value
         if (serviceInfo == null) {
-            promise.reject("NOT_FOUND", "Service not found")
+            promise.reject("NOT_FOUND", "Service not found: $serviceName")
             return
         }
         nsd.resolve(
@@ -191,75 +382,100 @@ class NativeRTNAttendanceModule(
                 } else {
                     @Suppress("DEPRECATION")
                     info.host?.hostAddress
-                } ?: "127.0.0.1"
-                val port = info.port
+                } ?: run {
+                    promise.reject("NO_HOST", "No valid host address found")
+                    return@resolve
+                }
                 try {
-                    val sock = Socket(host, port)
-                    synchronized(this) {
-                        clientSocket?.runCatching { close() }
-                        clientSocket = sock
-                        clientWriter = PrintWriter(sock.getOutputStream(), true)
-                        clientReader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                    val sock = Socket(host, info.port)
+                    try {
+                        val writer = PrintWriter(sock.getOutputStream(), true)
+                        val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                        
+                        synchronized(clientLock) {
+                            closeClientConnection()
+                            clientSocket = sock
+                            clientWriter = writer
+                            clientReader = reader
+                        }
+                        
+                        promise.resolve(Arguments.createMap().apply {
+                            putString("ip", host)
+                            putInt("port", info.port)
+                            putString("status", "connected")
+                        })
+                    } catch (e: Exception) {
+                        // Close socket if stream creation fails
+                        runCatching { sock.close() }
+                        throw e
                     }
-                    val m = Arguments.createMap().apply {
-                        putString("ip", host)
-                        putInt("port", port)
-                    }
-                    promise.resolve(m)
                 } catch (e: Exception) {
-                    promise.reject("CONNECT_FAILED", e)
+                    Log.e(TAG, "Failed to connect to service", e)
+                    promise.reject("CONNECT_FAILED", "Failed to connect: ${e.message}", e)
                 }
             },
-            onError = { err -> promise.reject("RESOLVE_FAILED", err) }
+            onError = { err ->
+                Log.e(TAG, "Failed to resolve service: $err")
+                promise.reject("RESOLVE_FAILED", err)
+            }
         )
     }
 
     override fun sendCheckin(payload: String, promise: Promise) {
-        val w = clientWriter
-        if (w == null) {
-            promise.reject("NO_CONNECTION", "No client connected")
-            return
-        }
-        try {
-            w.println(payload)
-            w.flush()
-            val ack = Arguments.createMap().apply {
-                putString("status", "ok")
+        synchronized(clientLock) {
+            val w = clientWriter
+            if (w == null || clientSocket?.isConnected != true || clientSocket?.isClosed == true) {
+                promise.reject("NO_CONNECTION", "No client connected")
+                return
             }
-            promise.resolve(ack)
-        } catch (e: Exception) {
-            val ack = Arguments.createMap().apply {
-                putString("status", "error")
-                putString("message", e.message ?: "Send error")
+            try {
+                w.println(payload)
+                w.flush()
+                promise.resolve(Arguments.createMap().apply {
+                    putString("status", "ok")
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send check-in", e)
+                promise.resolve(Arguments.createMap().apply {
+                    putString("status", "error")
+                    putString("message", e.message ?: "Send error")
+                })
             }
-            promise.resolve(ack)
         }
     }
 
     override fun disconnect(promise: Promise) {
         try {
-            synchronized(this) {
-                clientWriter?.close()
-                clientReader?.close()
-                clientSocket?.close()
-                clientWriter = null
-                clientReader = null
-                clientSocket = null
-            }
-            promise.resolve(null)
+            synchronized(clientLock) { closeClientConnection() }
+            promise.resolve(Arguments.createMap().apply {
+                putString("status", "disconnected")
+            })
         } catch (e: Exception) {
-            promise.reject("DISCONNECT_FAILED", e)
+            Log.e(TAG, "Failed to disconnect", e)
+            promise.reject("DISCONNECT_FAILED", "Failed to disconnect: ${e.message}", e)
         }
     }
 
     override fun invalidate() {
         super.invalidate()
+        
+        // Cancel discovery timeout
+        discoveryTimeoutRunnable?.let { 
+            discoveryHandler.removeCallbacks(it)
+            discoveryTimeoutRunnable = null
+        }
+        
         runCatching { nsd.stopDiscovery() }
         runCatching { nsd.unregister() }
-        runCatching { clientSocket?.close() }
-        runCatching { clientWriter?.close() }
-        runCatching { clientReader?.close() }
+        closeAllServerConnections()
+        synchronized(clientLock) { closeClientConnection() }
         runCatching { serverSocket?.close() }
-        serverPool.shutdown()
+        serverSocket = null
+        runCatching {
+            serverPool.shutdown()
+            if (!serverPool.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                serverPool.shutdownNow()
+            }
+        }
     }
 }
