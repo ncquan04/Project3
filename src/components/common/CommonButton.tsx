@@ -1,7 +1,8 @@
 import { View, Text, TouchableOpacity } from 'react-native';
 import React from 'react';
 import LinearGradient from 'react-native-linear-gradient';
-import { THEME_COLOR } from '../../constants';
+import { THEME_COLOR } from '../../theme';
+import AppText from '../appText/AppText';
 
 interface CommonButtonProps {
   buttonText?: string;
@@ -23,11 +24,11 @@ const CommonButton = (props: CommonButtonProps) => {
         colors={[THEME_COLOR.primary, THEME_COLOR.primary + 'cc']}
         style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
       >
-        <Text
+        <AppText
           style={{ color: THEME_COLOR.white, fontSize: 16, fontWeight: 'bold' }}
         >
           {props.buttonText ?? 'Continue'}
-        </Text>
+        </AppText>
       </LinearGradient>
     </TouchableOpacity>
   );

@@ -1,10 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { THEME_COLOR } from '../constants';
 import DashboardTab from '../tabs/Dashboard/DashboardTab';
 import AttendanceTab from '../tabs/Attendance/AttendanceTab';
 import CheckIconCircle from '../icons/CheckIconCircle';
 import DashboardIcon from '../icons/DashboardIcon';
+import { THEME_COLOR } from '../theme';
 
 export type HomeTabParamList = {
   Dashboard: undefined;

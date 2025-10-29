@@ -1,12 +1,13 @@
 import { View, Text, StatusBar, Image } from 'react-native';
 import React, { useState } from 'react';
 import LinearGradient from 'react-native-linear-gradient';
-import { THEME_COLOR } from '../../constants';
 import CommonButton from '../../components/common/CommonButton';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginArea from './components/LoginArea';
 import SignupHeader from './components/SignupHeader';
 import { UserRole } from '../../types';
+import { THEME_COLOR } from '../../theme';
+import AppText from '../../components/appText/AppText';
 
 const RegisterPage = () => {
   const { register } = useAuth();
@@ -49,11 +50,11 @@ const RegisterPage = () => {
           style={{ width: 32, maxHeight: 64 }}
           resizeMode="contain"
         />
-        <Text
+        <AppText
           style={{ fontSize: 16, fontWeight: 'bold', color: THEME_COLOR.white }}
         >
           HUST
-        </Text>
+        </AppText>
       </View>
       <View
         style={{

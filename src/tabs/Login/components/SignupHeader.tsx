@@ -1,7 +1,8 @@
 import { Text, TouchableOpacity, View } from 'react-native';
-import { THEME_COLOR } from '../../../constants';
 import { navigationRef } from '../../../navigation';
 import BackArrowIcon from '../../../icons/BackArrowIcon';
+import { THEME_COLOR } from '../../../theme';
+import AppText from '../../../components/appText/AppText';
 
 const SignupHeader = () => {
   const onPressSignIn = () => {
@@ -24,7 +25,7 @@ const SignupHeader = () => {
       <TouchableOpacity style={{ padding: 4, left: -12 }} onPress={handleBack}>
         <BackArrowIcon width={16} height={16} />
       </TouchableOpacity>
-      <Text
+      <AppText
         style={{
           fontSize: 24,
           fontWeight: 'bold',
@@ -32,9 +33,9 @@ const SignupHeader = () => {
         }}
       >
         Sign Up
-      </Text>
-      <Text>
-        <Text
+      </AppText>
+      <AppText>
+        <AppText
           style={{
             fontSize: 14,
             fontWeight: 'medium',
@@ -42,8 +43,8 @@ const SignupHeader = () => {
           }}
         >
           {`Already have an account? `}
-        </Text>
-        <Text
+        </AppText>
+        <AppText
           style={{
             fontSize: 14,
             fontWeight: 'medium',
@@ -53,8 +54,8 @@ const SignupHeader = () => {
           onPress={onPressSignIn}
         >
           Sign in
-        </Text>
-      </Text>
+        </AppText>
+      </AppText>
     </View>
   );
 };

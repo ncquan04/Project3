@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
-import { THEME_COLOR } from '../../../constants';
 import { navigationRef } from '../../../navigation';
+import { THEME_COLOR } from '../../../theme';
+import AppText from '../../../components/appText/AppText';
 
 const LoginHeader = () => {
   const onPressSignUp = () => {
@@ -9,13 +10,13 @@ const LoginHeader = () => {
 
   return (
     <View style={{ gap: 8, alignItems: 'center' }}>
-      <Text
+      <AppText
         style={{ fontSize: 24, fontWeight: 'bold', color: THEME_COLOR.black }}
       >
         Login
-      </Text>
-      <Text>
-        <Text
+      </AppText>
+      <AppText>
+        <AppText
           style={{
             fontSize: 14,
             fontWeight: 'medium',
@@ -23,8 +24,8 @@ const LoginHeader = () => {
           }}
         >
           {`Does not have an account? `}
-        </Text>
-        <Text
+        </AppText>
+        <AppText
           style={{
             fontSize: 14,
             fontWeight: 'medium',
@@ -34,8 +35,8 @@ const LoginHeader = () => {
           onPress={onPressSignUp}
         >
           Sign up
-        </Text>
-      </Text>
+        </AppText>
+      </AppText>
     </View>
   );
 };

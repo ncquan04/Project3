@@ -1,8 +1,9 @@
 import { View, Text, TextInput, ScrollView } from 'react-native';
 import React, { Dispatch, SetStateAction, useEffect, useRef } from 'react';
-import { THEME_COLOR } from '../../../constants';
 import Animated from 'react-native-reanimated';
 import { UserRole } from '../../../types';
+import { THEME_COLOR } from '../../../theme';
+import AppText from '../../../components/appText/AppText';
 
 interface LoginAreaProps {
   username: string;
@@ -77,7 +78,7 @@ const LoginArea = (props: LoginAreaProps) => {
       </View>
       <View style={{ width: '100%', gap: 8, alignItems: 'center' }}>
         <View style={{ width: '100%', alignItems: 'flex-start', gap: 8 }}>
-          <Text
+          <AppText
             style={{
               fontSize: 14,
               fontWeight: 'semibold',
@@ -85,7 +86,7 @@ const LoginArea = (props: LoginAreaProps) => {
             }}
           >
             Username or Email
-          </Text>
+          </AppText>
           <TextInput
             placeholder="Enter your username or email"
             placeholderTextColor={THEME_COLOR.mediumGrey + 'cc'}
@@ -102,7 +103,7 @@ const LoginArea = (props: LoginAreaProps) => {
           </TextInput>
         </View>
         <View style={{ width: '100%', alignItems: 'flex-start', gap: 8 }}>
-          <Text
+          <AppText
             style={{
               fontSize: 14,
               fontWeight: 'semibold',
@@ -110,7 +111,7 @@ const LoginArea = (props: LoginAreaProps) => {
             }}
           >
             Password
-          </Text>
+          </AppText>
           <TextInput
             placeholder="Enter your password"
             placeholderTextColor={THEME_COLOR.mediumGrey + 'cc'}
@@ -129,7 +130,7 @@ const LoginArea = (props: LoginAreaProps) => {
         {props.confirmPassword !== undefined &&
           props.setConfirmPassword !== undefined && (
             <View style={{ width: '100%', alignItems: 'flex-start', gap: 8 }}>
-              <Text
+              <AppText
                 style={{
                   fontSize: 14,
                   fontWeight: 'semibold',
@@ -137,7 +138,7 @@ const LoginArea = (props: LoginAreaProps) => {
                 }}
               >
                 Confirm Password
-              </Text>
+              </AppText>
               <TextInput
                 placeholder="Re-enter your password"
                 placeholderTextColor={THEME_COLOR.mediumGrey + 'cc'}
@@ -156,7 +157,7 @@ const LoginArea = (props: LoginAreaProps) => {
           )}
         {props.chooseRole && (
           <View style={{ width: '100%', alignItems: 'flex-start', gap: 8 }}>
-            <Text
+            <AppText
               style={{
                 fontSize: 14,
                 fontWeight: 'semibold',
@@ -164,7 +165,7 @@ const LoginArea = (props: LoginAreaProps) => {
               }}
             >
               Choose Role
-            </Text>
+            </AppText>
             <View
               style={{
                 height: ITEM_HEIGHT * 3,
@@ -215,7 +216,7 @@ const LoginArea = (props: LoginAreaProps) => {
                         opacity: isSelected ? 1 : 0.5,
                       }}
                     >
-                      <Text
+                      <AppText
                         style={{
                           fontSize: isSelected ? 20 : 16,
                           fontWeight: 'bold',
@@ -225,7 +226,7 @@ const LoginArea = (props: LoginAreaProps) => {
                         {roleOption === UserRole.Student
                           ? 'Student'
                           : 'Teacher'}
-                      </Text>
+                      </AppText>
                     </View>
                   );
                 })}

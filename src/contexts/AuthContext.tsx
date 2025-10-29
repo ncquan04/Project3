@@ -53,8 +53,6 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
 
-  console.log('AAAAAAAAAAAAAAAAAAAAAAAA', user, role);
-
   const handleAuthStateChanged = (user: FirebaseAuthTypes.User | null) => {
     setUser(user);
     if (isLoading) {

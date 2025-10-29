@@ -3,7 +3,6 @@ import { TurboModuleRegistry } from 'react-native';
 
 export type DiscoveredService = {
   serviceName: string;
-  serviceType: string;
 };
 
 export type ResolvedService = {
@@ -29,10 +28,10 @@ export interface Spec extends TurboModule {
 
   startServer(): Promise<{ ip: string; port: number }>;
   stopServer(): Promise<void>;
-  registerService(serviceType: string): Promise<{ serviceName: string }>;
+  registerService(): Promise<{ serviceName: string }>;
   unregisterService(): Promise<void>;
 
-  startDiscovery(serviceType: string, timeoutMs: number): Promise<void>;
+  startDiscovery(timeoutMs: number): Promise<void>;
   stopDiscovery(): Promise<void>;
   resolveAndConnect(serviceName: string): Promise<{ ip: string; port: number }>;
   sendCheckin(payload: string): Promise<checkinAck>;
