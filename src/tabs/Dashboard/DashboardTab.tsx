@@ -1,8 +1,59 @@
-import { View } from 'react-native';
-import React from 'react';
+import {
+  View,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import UserInfoCard from '../../components/userInfoCard/UserInfoCard';
+import { THEME_COLOR } from '../../theme';
+import WeekDays from './components/WeekDays';
+import CheckinSlider from './checkinSlider/CheckinSlider';
+import { getStudentClasses } from '../../utils';
+import { useAuth } from '../../contexts/AuthContext';
+import TodayClasses from './components/TodayClasses';
+import { Class } from '../../types';
 
 const DashboardTab = () => {
-  return <View style={{ flex: 1, width: '100%' }}></View>;
+  const { user } = useAuth();
+  const [day, setDay] = useState<Date>(new Date());
+  const [classes, setClasses] = useState<Class[]>([]);
+
+  useEffect(() => {
+    getStudentClasses(user?.uid || '').then(fetchedClasses => {
+      setClasses(fetchedClasses);
+    });
+  }, []);
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        width: '100%',
+        backgroundColor: THEME_COLOR.white,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        gap: 16,
+      }}
+    >
+      <UserInfoCard />
+      <WeekDays day={day} setDay={setDay} />
+
+      <ScrollView
+        contentContainerStyle={{
+          width: '100%',
+          backgroundColor: THEME_COLOR.veryLightGrey + '88',
+          borderRadius: 16,
+          gap: 32,
+        }}
+      >
+        <TodayClasses today={day} userClasses={classes} />
+      </ScrollView>
+      <CheckinSlider />
+    </View>
+  );
 };
 
 export default DashboardTab;

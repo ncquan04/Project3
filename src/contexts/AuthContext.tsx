@@ -16,7 +16,6 @@ import {
 import { navigationRef } from '../navigation';
 import { getFirestore } from '@react-native-firebase/firestore';
 import { UserRole } from '../types';
-import LoadingModal from '../components/loading/LoadingModal';
 
 const AuthContext = createContext<{
   isAuthenticated: boolean;
@@ -53,8 +52,27 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
 
-  const handleAuthStateChanged = (user: FirebaseAuthTypes.User | null) => {
+  const handleAuthStateChanged = async (
+    user: FirebaseAuthTypes.User | null,
+  ) => {
     setUser(user);
+
+    if (user) {
+      try {
+        const userData = await getFirestore()
+          .collection('users')
+          .doc(user.uid)
+          .get();
+        const data = userData.data();
+        setRole((data?.role as UserRole) || null);
+      } catch (error) {
+        console.error('Error fetching user role: ', error);
+        setRole(null);
+      }
+    } else {
+      setRole(null);
+    }
+
     if (isLoading) {
       setIsLoading(false);
     }
@@ -85,13 +103,8 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       })
       .then(userData => {
         setRole(userData?.role as UserRole);
-      })
-      .then(() => {
         setIsLoading(false);
-        navigationRef.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        });
+        // Navigation sẽ tự động chuyển khi isAuthenticated thay đổi
       })
       .catch(error => {
         console.error('Login error: ', error);
@@ -102,12 +115,9 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     await signOut(getAuth())
-      .then(() => setUser(null))
       .then(() => {
-        navigationRef.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
+        setUser(null);
+        setRole(null);
       })
       .catch(error => {
         console.error('Logout error: ', error);
@@ -143,13 +153,8 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       })
       .then(userData => {
         setRole(userData?.role as UserRole);
-      })
-      .then(() => {
         setIsLoading(false);
-        navigationRef.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        });
+        // Navigation sẽ tự động chuyển khi isAuthenticated thay đổi
       })
       .catch(error => {
         console.error('Register error: ', error);
@@ -168,7 +173,6 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
         role,
       }}
     >
-      <LoadingModal visible={isLoading} />
       {children}
     </AuthContext.Provider>
   );

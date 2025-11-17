@@ -41,7 +41,7 @@ export default function AppText(props: TextProps) {
     <Text
       allowFontScaling={false}
       {...props}
-      style={[props.style, { fontFamily }, disableStyles, { color: textColor }]}
+      style={[props.style, { fontFamily }, { color: textColor }]}
     />
   );
 }

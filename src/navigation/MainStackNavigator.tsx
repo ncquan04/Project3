@@ -14,7 +14,15 @@ export type AppStackParamList = {
 const MainStack = createNativeStackNavigator<AppStackParamList>();
 
 export const MainStackNavigator = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <MainStack.Navigator
@@ -22,11 +30,15 @@ export const MainStackNavigator = () => {
         navigationBarHidden: true,
         headerShown: false,
       }}
-      initialRouteName={isAuthenticated ? 'Home' : 'Login'}
     >
-      <MainStack.Screen name="Home" component={HomeTabsNavigator} />
-      <MainStack.Screen name="Login" component={LoginPage} />
-      <MainStack.Screen name="Register" component={RegisterPage} />
+      {isAuthenticated ? (
+        <MainStack.Screen name="Home" component={HomeTabsNavigator} />
+      ) : (
+        <>
+          <MainStack.Screen name="Login" component={LoginPage} />
+          <MainStack.Screen name="Register" component={RegisterPage} />
+        </>
+      )}
     </MainStack.Navigator>
   );
 };
