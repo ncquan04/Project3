@@ -14,7 +14,12 @@ import {
   useState,
 } from 'react';
 import { navigationRef } from '../navigation';
-import { getFirestore } from '@react-native-firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+} from '@react-native-firebase/firestore';
 import { UserRole } from '../types';
 
 const AuthContext = createContext<{
@@ -59,10 +64,9 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
 
     if (user) {
       try {
-        const userData = await getFirestore()
-          .collection('users')
-          .doc(user.uid)
-          .get();
+        const db = getFirestore();
+        const userRef = doc(db, 'users', user.uid);
+        const userData = await getDoc(userRef);
         const data = userData.data();
         setRole((data?.role as UserRole) || null);
       } catch (error) {
@@ -95,10 +99,9 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
         return userCredential;
       })
       .then(async userCredential => {
-        const res = await getFirestore()
-          .collection('users')
-          .doc(userCredential.user.uid)
-          .get();
+        const db = getFirestore();
+        const userRef = doc(db, 'users', userCredential.user.uid);
+        const res = await getDoc(userRef);
         return res.data();
       })
       .then(userData => {
@@ -136,19 +139,17 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
         return userCredential;
       })
       .then(async userCredential => {
-        await getFirestore()
-          .collection('users')
-          .doc(userCredential.user.uid)
-          .set({
-            role: role,
-          });
+        const db = getFirestore();
+        const userRef = doc(db, 'users', userCredential.user.uid);
+        await setDoc(userRef, {
+          role: role,
+        });
         return userCredential;
       })
       .then(async userCredential => {
-        const res = await getFirestore()
-          .collection('users')
-          .doc(userCredential.user.uid)
-          .get();
+        const db = getFirestore();
+        const userRef = doc(db, 'users', userCredential.user.uid);
+        const res = await getDoc(userRef);
         return res.data();
       })
       .then(userData => {

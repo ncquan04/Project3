@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import { Class } from '../../../types';
 import ClassItem from './ClassItem';
+import AppText from '../../../components/appText/AppText';
 
 interface TodayClassesProps {
   today: Date;
@@ -40,6 +41,20 @@ const TodayClasses = (props: TodayClassesProps) => {
       {todayClasses.map(cls => (
         <ClassItem key={cls.id} cls={cls} />
       ))}
+      {todayClasses.length === 0 && (
+        <View
+          style={{
+            width: '100%',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 32,
+          }}
+        >
+          <AppText style={{ fontSize: 16, color: '#666666' }}>
+            No classes scheduled for today.
+          </AppText>
+        </View>
+      )}
     </View>
   );
 };

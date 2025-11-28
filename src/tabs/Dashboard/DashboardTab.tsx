@@ -11,21 +11,27 @@ import UserInfoCard from '../../components/userInfoCard/UserInfoCard';
 import { THEME_COLOR } from '../../theme';
 import WeekDays from './components/WeekDays';
 import CheckinSlider from './checkinSlider/CheckinSlider';
-import { getStudentClasses } from '../../utils';
+import { getStudentClasses, getTeacherClasses } from '../../utils';
 import { useAuth } from '../../contexts/AuthContext';
 import TodayClasses from './components/TodayClasses';
-import { Class } from '../../types';
+import { Class, UserRole } from '../../types';
 
 const DashboardTab = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [day, setDay] = useState<Date>(new Date());
   const [classes, setClasses] = useState<Class[]>([]);
 
   useEffect(() => {
-    getStudentClasses(user?.uid || '').then(fetchedClasses => {
-      setClasses(fetchedClasses);
-    });
-  }, []);
+    if (!user) {
+      return;
+    }
+
+    if (role === UserRole.Teacher) {
+      getTeacherClasses(user.uid).then(setClasses);
+    } else {
+      getStudentClasses(user.uid).then(setClasses);
+    }
+  }, [user, role]);
 
   return (
     <View

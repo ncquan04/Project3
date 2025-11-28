@@ -56,6 +56,7 @@ class NativeRTNAttendanceModule(
     private var registeredServiceName: String? = null
     private val foundServices = ConcurrentHashMap<String, NsdServiceInfo>()
     
+    private var discoveryPromise: Promise? = null
     private var discoveryTimeoutRunnable: Runnable? = null
     private val discoveryHandler = Handler(Looper.getMainLooper())
 
@@ -124,11 +125,6 @@ class NativeRTNAttendanceModule(
 
     override fun setSessionSecret(sessionSecret: String?) {
         this.sessionSecret = sessionSecret
-        val map = Arguments.createMap().apply {
-            putString("key", "sessionSecret")
-            putString("value", sessionSecret ?: "unset")
-        }
-        emitOnKeyAdded(map)
     }
 
     override fun startServer(promise: Promise) {
@@ -161,14 +157,6 @@ class NativeRTNAttendanceModule(
                             }
                             
                             Log.d(TAG, "New client connected: $clientId (Total: $totalClients)")
-                            
-                            val map = Arguments.createMap().apply {
-                                putString("key", "clientConnected")
-                                putString("value", clientId)
-                                putInt("totalClients", totalClients)
-                            }
-                            emitOnKeyAdded(map)
-                            
                             serverPool.execute { handleClient(clientId, connection) }
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to setup client connection: $clientId", e)
@@ -211,28 +199,11 @@ class NativeRTNAttendanceModule(
                 }
                 
                 Log.d(TAG, "Message from $clientId: $line")
-                
-                val totalClients = connectedClients.size
-                val map = Arguments.createMap().apply {
-                    putString("key", "messageReceived")
-                    putString("value", line)
-                    putString("clientId", clientId)
-                    putInt("totalClients", totalClients)
-                }
-                emitOnKeyAdded(map)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Client $clientId disconnected or error occurred", e)
         } finally {
             closeServerClientConnection(clientId)
-            
-            val totalClients = connectedClients.size
-            val map = Arguments.createMap().apply {
-                putString("key", "clientDisconnected")
-                putString("value", clientId)
-                putInt("totalClients", totalClients)
-            }
-            emitOnKeyAdded(map)
         }
     }
 
@@ -294,57 +265,65 @@ class NativeRTNAttendanceModule(
         }
     }
 
-    override fun startDiscovery(timeoutMs: Double, promise: Promise) {
+    override fun findService(timeoutMs: Double, promise: Promise) {
         try {
-            // Cancel any pending timeout
+            if (discoveryPromise != null) {
+                promise.reject("BUSY", "Discovery already in progress")
+                return
+            }
+            
+            // Cancel any pending timeout (just in case)
             discoveryTimeoutRunnable?.let { discoveryHandler.removeCallbacks(it) }
             
+            discoveryPromise = promise
             val type = SERVICE_TYPE
+            
             nsd.discover(
                 serviceType = type,
                 onFound = { serviceInfo ->
-                    foundServices[svcKey(serviceInfo)] = serviceInfo
-                    val map = Arguments.createMap().apply {
-                        putString("key", "serviceFound")
-                        putString("serviceName", serviceInfo.serviceName)
+                    val p = discoveryPromise
+                    if (p != null) {
+                        foundServices[svcKey(serviceInfo)] = serviceInfo
+                        p.resolve(Arguments.createMap().apply {
+                            putString("serviceName", serviceInfo.serviceName)
+                        })
+                        discoveryPromise = null
+                        
+                        // Stop discovery and timeout
+                        discoveryTimeoutRunnable?.let { discoveryHandler.removeCallbacks(it) }
+                        discoveryTimeoutRunnable = null
+                        runCatching { nsd.stopDiscovery() }
                     }
-                    emitOnKeyAdded(map)
                 },
                 onLost = { serviceInfo ->
                     foundServices.remove(svcKey(serviceInfo))
-                    val map = Arguments.createMap().apply {
-                        putString("key", "serviceLost")
-                        putString("serviceName", serviceInfo.serviceName)
-                    }
-                    emitOnKeyAdded(map)
                 },
                 onError = { err ->
                     Log.e(TAG, "Discovery error: $err")
-                    val map = Arguments.createMap().apply {
-                        putString("key", "discoveryError")
-                        putString("value", err)
+                    val p = discoveryPromise
+                    if (p != null) {
+                        p.reject("DISCOVERY_ERROR", err)
+                        discoveryPromise = null
+                        discoveryTimeoutRunnable?.let { discoveryHandler.removeCallbacks(it) }
+                        discoveryTimeoutRunnable = null
                     }
-                    emitOnKeyAdded(map)
                 }
             )
             
             // Schedule timeout
             discoveryTimeoutRunnable = Runnable {
-                runCatching {
-                    nsd.stopDiscovery()
-                    promise.resolve(Arguments.createMap().apply {
-                        putString("status", "discovery_stopped")
-                    })
-                }.onFailure { e ->
-                    Log.e(TAG, "Failed to stop discovery", e)
-                    promise.reject("STOP_DISCOVERY_FAILED", "Failed to stop discovery: ${e.message}", e)
+                val p = discoveryPromise
+                if (p != null) {
+                    p.reject("TIMEOUT", "No service found within timeout")
+                    discoveryPromise = null
+                    runCatching { nsd.stopDiscovery() }
                 }
-                discoveryTimeoutRunnable = null
             }
             discoveryHandler.postDelayed(discoveryTimeoutRunnable!!, timeoutMs.toLong())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start discovery", e)
             promise.reject("START_DISCOVERY_FAILED", "Failed to start discovery: ${e.message}", e)
+            discoveryPromise = null
         }
     }
 
@@ -354,6 +333,11 @@ class NativeRTNAttendanceModule(
             discoveryTimeoutRunnable?.let { 
                 discoveryHandler.removeCallbacks(it)
                 discoveryTimeoutRunnable = null
+            }
+            
+            if (discoveryPromise != null) {
+                discoveryPromise?.reject("CANCELLED", "Discovery stopped manually")
+                discoveryPromise = null
             }
             
             nsd.stopDiscovery()
@@ -464,6 +448,10 @@ class NativeRTNAttendanceModule(
             discoveryHandler.removeCallbacks(it)
             discoveryTimeoutRunnable = null
         }
+        
+        // Reject pending promise
+        discoveryPromise?.reject("INVALIDATED", "Module invalidated")
+        discoveryPromise = null
         
         runCatching { nsd.stopDiscovery() }
         runCatching { nsd.unregister() }

@@ -3,6 +3,7 @@ package com.native_rtn_attendance
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import androidx.core.content.getSystemService
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -15,6 +16,9 @@ class NSDHelper(context: Context) {
     }
 
     private val nsd: NsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager?: throw IllegalStateException("NSD service not available")
+    private val wifiManager: WifiManager = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager?: throw IllegalStateException("Wifi service not available")
+    private var multicastLock: WifiManager.MulticastLock? = null
+    
     private val lock = Any()
     private var regListener: NsdManager.RegistrationListener ?= null
     private var disListener: NsdManager.DiscoveryListener ?= null
@@ -76,11 +80,35 @@ class NSDHelper(context: Context) {
         }
     }
 
+    private fun acquireMulticastLock() {
+        if (multicastLock == null) {
+            multicastLock = wifiManager.createMulticastLock("NSDMulticastLock").apply {
+                setReferenceCounted(true)
+            }
+        }
+        multicastLock?.let {
+            if (!it.isHeld) {
+                it.acquire()
+            }
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        multicastLock?.let {
+            if (it.isHeld) {
+                it.release()
+            }
+        }
+    }
+
     fun discover(serviceType: String, onFound: (NsdServiceInfo) -> Unit, onLost: (NsdServiceInfo) -> Unit, onError: (String) -> Unit) {
         synchronized(lock) {
             if (disListener != null) {
                 runCatching { nsd.stopServiceDiscovery(disListener) }
             }
+            
+            acquireMulticastLock()
+            
             val type = normalizeType(serviceType)
             disListener = object : NsdManager.DiscoveryListener {
                 override fun onDiscoveryStarted(serviceType: String?) {}
@@ -97,16 +125,19 @@ class NSDHelper(context: Context) {
                 }
 
                 override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) {
+                    releaseMulticastLock()
                     onError("START_DISCOVERY_FAILED: ${mapNsdError(errorCode)}")
                 }
 
                 override fun onStopDiscoveryFailed(serviceType: String?, errorCode: Int) {
+                    releaseMulticastLock()
                     onError("STOP_DISCOVERY_FAILED: ${mapNsdError(errorCode)}")
                 }
             }
             try {
                 nsd.discoverServices(type, NsdManager.PROTOCOL_DNS_SD, disListener)
             } catch (e: Exception) {
+                releaseMulticastLock()
                 onError("START_DISCOVERY_FAILED: ${e.message}")
             }
         }
@@ -116,6 +147,7 @@ class NSDHelper(context: Context) {
         synchronized(lock) {
             disListener?.let { runCatching { nsd.stopServiceDiscovery(it) } }
             disListener = null
+            releaseMulticastLock()
         }
     }
 

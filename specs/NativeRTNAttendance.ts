@@ -11,7 +11,7 @@ export type ResolvedService = {
   serviceName: string;
 };
 
-export type checkinAck = {
+export type CheckinAck = {
   status: 'ok' | 'try_later' | 'error';
   receiptId?: string;
   serverTime?: number;
@@ -31,13 +31,11 @@ export interface Spec extends TurboModule {
   registerService(): Promise<{ serviceName: string }>;
   unregisterService(): Promise<void>;
 
-  startDiscovery(timeoutMs: number): Promise<void>;
+  findService(timeoutMs: number): Promise<DiscoveredService>;
   stopDiscovery(): Promise<void>;
   resolveAndConnect(serviceName: string): Promise<{ ip: string; port: number }>;
-  sendCheckin(payload: string): Promise<checkinAck>;
+  sendCheckin(payload: string): Promise<CheckinAck>;
   disconnect(): Promise<void>;
-
-  readonly onKeyAdded: CodegenTypes.EventEmitter<KeyValuePair>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeRTNAttendance');
