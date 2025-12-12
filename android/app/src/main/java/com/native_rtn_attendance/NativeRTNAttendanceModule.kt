@@ -7,6 +7,8 @@ import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
@@ -80,6 +82,39 @@ class NativeRTNAttendanceModule(
             Log.e(TAG, "Failed to get local IPv4 address", e)
             return "127.0.0.1"
         }
+    }
+
+    private fun sendEvent(eventName: String, params: WritableMap) {
+        if (!reactApplicationContext.hasActiveCatalystInstance()) {
+            return
+        }
+
+        try {
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(eventName, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to emit event $eventName", e)
+        }
+    }
+
+    private fun emitAttendanceCheckin(clientId: String, rawMessage: String) {
+        if (!rawMessage.startsWith("AUTH:")) {
+            return
+        }
+
+        val parts = rawMessage.split(":")
+        if (parts.size < 3) {
+            return
+        }
+
+        val payload = Arguments.createMap().apply {
+            putString("clientId", clientId)
+            putString("classId", parts.getOrNull(1) ?: "")
+            putString("studentId", parts.getOrNull(2) ?: "")
+            putDouble("timestamp", System.currentTimeMillis().toDouble())
+        }
+        sendEvent("attendance_checkin", payload)
     }
 
     private fun closeClientConnection() {
@@ -199,6 +234,7 @@ class NativeRTNAttendanceModule(
                 }
                 
                 Log.d(TAG, "Message from $clientId: $line")
+                emitAttendanceCheckin(clientId, line)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Client $clientId disconnected or error occurred", e)

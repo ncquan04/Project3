@@ -8,7 +8,7 @@ import {
   where,
   FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
-import { Class } from '../types';
+import { Class, Student } from '../types';
 import NativeRTNAttendance from '../../specs/NativeRTNAttendance';
 
 export const getStudentClasses = async (studentId: string) => {
@@ -185,5 +185,23 @@ export const discoverAndSendCheckin = async (cls: Class, studentId: string) => {
     console.log('Check-in payload sent successfully:', res);
   } catch (error) {
     console.error('Check-in failed:', error);
+  }
+};
+
+export const getStudentProfile = async (studentId: string) => {
+  try {
+    const db = getFirestore();
+    const snapshot = await getDoc(doc(db, 'students', studentId));
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return {
+      id: snapshot.id,
+      ...(snapshot.data() as Student),
+    };
+  } catch (error) {
+    console.error('Error fetching student profile:', error);
+    return null;
   }
 };
