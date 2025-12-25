@@ -12,52 +12,17 @@ import Svg, {
 function CheckIconCircle(props: SvgProps) {
   return (
     <Svg
-      //   xmlns="http://www.w3.org/2000/svg"
+      // xmlns="http://www.w3.org/2000/svg"
       width={512}
       height={512}
-      viewBox="0 0 682.667 682.667"
-      //   enableBackground="new 0 0 512 512"
+      viewBox="0 0 408.576 408.576"
+      // enableBackground="new 0 0 512 512"
       {...props}
     >
-      <Defs>
-        <ClipPath id="b">
-          <Path d="M0 512h512V0H0z" data-original="#000000" />
-        </ClipPath>
-      </Defs>
-      <Mask id="a">
-        <Rect width="100%" height="100%" fill="#fff" data-original="#ffffff" />
-      </Mask>
-      <G mask="url(#a)">
-        <Path
-          d="M473.365 251.884L294.467 430.782l-85.164-85.162"
-          fill="none"
-          stroke="#000"
-          strokeWidth={40}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeMiterlimit={10}
-          data-original="#000000"
-          strokeDasharray="none"
-          strokeOpacity={1}
-        />
-        <G
-          clipPath="url(#b)"
-          transform="matrix(1.33333 0 0 -1.33333 0 682.667)"
-        >
-          <Path
-            d="M492 256c0-130.339-105.661-236-236-236S20 125.661 20 256s105.661 236 236 236 236-105.661 236-236z"
-            fill="none"
-            stroke="#000"
-            strokeWidth={40}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeMiterlimit={10}
-            data-original="#000000"
-            strokeDasharray="none"
-            strokeOpacity={1}
-          />
-        </G>
-      </G>
+      <Path
+        d="M204.288 0C91.648 0 0 91.648 0 204.288s91.648 204.288 204.288 204.288 204.288-91.648 204.288-204.288S316.928 0 204.288 0zm114.176 150.528l-130.56 129.536c-7.68 7.68-19.968 8.192-28.16.512L90.624 217.6c-8.192-7.68-8.704-20.48-1.536-28.672 7.68-8.192 20.48-8.704 28.672-1.024l54.784 50.176L289.28 121.344c8.192-8.192 20.992-8.192 29.184 0s8.192 20.992 0 29.184z"
+        data-original="#000000"
+      />
     </Svg>
   );
 }

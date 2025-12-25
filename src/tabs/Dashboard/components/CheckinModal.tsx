@@ -104,10 +104,6 @@ const CheckinModal = ({
             </View>
           )}
         </View>
-        <AppText style={styles.headerSubtitle}>
-          Trạng thái phiên sẽ cập nhật tức thời để bạn chủ động kiểm soát việc
-          điểm danh.
-        </AppText>
         <ClassSummary cls={activeClass} />
         {renderContent()}
       </ScrollView>

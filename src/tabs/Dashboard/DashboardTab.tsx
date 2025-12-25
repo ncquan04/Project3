@@ -5,6 +5,7 @@ import {
   EmitterSubscription,
 } from 'react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { getFirestore, doc, setDoc } from '@react-native-firebase/firestore';
 import UserInfoCard from '../../components/userInfoCard/UserInfoCard';
 import { THEME_COLOR } from '../../theme';
 import WeekDays from './components/WeekDays';
@@ -49,6 +50,8 @@ const DashboardTab = () => {
     createInitialTeacherState(),
   );
 
+  const { studentInfo, teacherInfo } = useAuth();
+
   const checkinModalRef = useRef<BaseModalRefType>(null);
   const teacherListenerRef = useRef<EmitterSubscription | null>(null);
   const studentNameCache = useRef<Record<string, string>>({});
@@ -58,6 +61,11 @@ const DashboardTab = () => {
       return;
     }
 
+    if (user.email === 'chiquannguyen363@gmail.com') {
+      getStudentClasses(user.uid).then(classes => {
+        setClasses(classes);
+      });
+    }
     if (role === UserRole.Teacher) {
       getTeacherClasses(user.uid).then(setClasses);
     } else {
@@ -201,10 +209,38 @@ const DashboardTab = () => {
           currentStep: 'sending',
           message: 'Đang gửi yêu cầu điểm danh...',
         });
-        const payload = `AUTH:${targetClass.id}:${user.uid}`;
+        const payload = `AUTH:${targetClass.id}:${studentInfo?.studentId}`;
         const ack = await NativeRTNAttendance.sendCheckin(payload);
 
         if (ack.status === 'ok') {
+          try {
+            const db = getFirestore();
+
+            const checkedInAt = Date.now();
+            const receiptId =
+              typeof ack.receiptId === 'string' ? ack.receiptId.trim() : '';
+
+            const attendanceId = receiptId || `${user.uid}_${checkedInAt}`;
+            const attendanceDocRef = doc(db, 'attendances', attendanceId);
+
+            await setDoc(
+              attendanceDocRef,
+              {
+                id: attendanceId,
+                receiptId: receiptId || null,
+                classId: targetClass.id,
+                studentId: studentInfo?.studentId ?? null,
+                checkedInAt,
+              },
+              { merge: true },
+            );
+          } catch (firestoreError) {
+            console.warn(
+              'Failed to write attendance to Firestore',
+              firestoreError,
+            );
+          }
+
           setStudentState({
             phase: 'success',
             currentStep: 'sending',
@@ -239,7 +275,7 @@ const DashboardTab = () => {
         }
       }
     },
-    [user],
+    [studentInfo, user],
   );
 
   const startTeacherSession = useCallback(

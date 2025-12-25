@@ -13,18 +13,19 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { navigationRef } from '../navigation';
 import {
   getFirestore,
   doc,
   getDoc,
   setDoc,
 } from '@react-native-firebase/firestore';
-import { UserRole } from '../types';
+import { Gender, Student, UserRole } from '../types';
 
 const AuthContext = createContext<{
   isAuthenticated: boolean;
   isLoading: boolean;
+  studentInfo: Student | null;
+  teacherInfo: any | null;
   login: (
     username: string,
     password: string,
@@ -41,6 +42,8 @@ const AuthContext = createContext<{
 }>({
   isAuthenticated: false,
   isLoading: true,
+  studentInfo: null,
+  teacherInfo: null,
   login: (
     username: string,
     password: string,
@@ -56,6 +59,8 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [studentInfo, setStudentInfo] = useState<Student | null>(null);
+  const [teacherInfo, setTeacherInfo] = useState<any | null>(null);
 
   const handleAuthStateChanged = async (
     user: FirebaseAuthTypes.User | null,
@@ -68,7 +73,26 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
         const userRef = doc(db, 'users', user.uid);
         const userData = await getDoc(userRef);
         const data = userData.data();
-        setRole((data?.role as UserRole) || null);
+        if ((data?.role as UserRole) === UserRole.Student) {
+          setStudentInfo({
+            studentId: data?.studentId || '',
+            name: data?.name || '',
+            email: data?.email || '',
+            gender: data?.gender || Gender.Male,
+            major: data?.major || '',
+            role: UserRole.Student,
+            year: data?.year || '',
+          });
+          setRole(UserRole.Student);
+        } else if ((data?.role as UserRole) === UserRole.Teacher) {
+          setTeacherInfo({
+            teacherId: data?.teacherId || '',
+            name: data?.name || '',
+            email: data?.email || '',
+            role: UserRole.Teacher,
+          });
+          setRole(UserRole.Teacher);
+        }
       } catch (error) {
         console.error('Error fetching user role: ', error);
         setRole(null);
@@ -167,6 +191,8 @@ const AuthContextProvider = ({ children }: { children: ReactNode }) => {
       value={{
         isAuthenticated: !!user,
         isLoading,
+        studentInfo,
+        teacherInfo,
         login,
         logout,
         register,
